@@ -1,0 +1,78 @@
+<!-- DO NOT REMOVE
+Made by:
+  Hillary Cañas
+  Leonardo Santella
+  Andrea Telleria
+ -->
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Contador de palabras</title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="all,follow">
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="css/font-awesome-animation.min.css">
+    <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+  </head>
+
+  <body>
+            <div class="container clearfix">
+              <div class="row">
+                <div class="col-md-5">
+                  <h2>Contar Palabra En Un Texto</h2>
+                    <div class="row">
+                      <form id="upload-form" method="post" action="textareaUpload.php" class="upload-form">
+                        <div class="controls">
+                          <div class="form-group">
+                            <label for="texto">Texto</label>
+                            <textarea rows="4" name="Texto" placeholder="Texto" required="required" class="form-control"></textarea>
+                            <label for="Word">Palabra a Contar</label>
+                            <input type="text" name="Word" class="form-control" required>
+                          </div>
+                          <div class="text-center">
+                            <input type="submit" name="cargarTexto" value="Cargar Texto" class="btn btn-primary btn-block">
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                    <div class="row" id="respuesta1" style="display: none;">
+                        <h2>La Palabra Se Encontró:</h2> <!--Para la respuesta cambias el style de arriba y agregas lo que falta-->
+                  </div>
+                </div>
+                <div class="col-md-2">
+                </div>
+                <div class="col-md-5">
+                  <h2 >Contar Palabra En Un Archivo</h2>
+                  <div class="row">
+                    <form action="fileUpload.php" method="post" enctype="multipart/form-data">
+                      <label for="archivo">Selecciona Un Archivo De Texto En Formato TXT:</label>
+                      <label class="btn btn-default btn-file btn-block" > <p id="Archivo">Seleccionar Archivo</p><input type="file" id="CargarArchivo" style="display: none;" required="required" name="File">
+                      </label>
+                      <label for="Word">Palabra A Contar</label>
+                      <input type="text" name="Word" class="form-control" required="required"><br>
+                      <input type="submit" value="Cargar Archivo y Contar" id="boton2" name="cargarArchivo" class="btn btn-primary btn-block">
+                    </form>
+                  </div>
+                  <div class="row" >
+                      <h2 id="respuesta2" style="display: none;">La Palabra Se Encontró:</h2> <!--Para la respuesta cambias el style de arriba y agregas lo que falta-->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
+  </body>
+
+  <!-- Javascript files-->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+  <script>window.jQuery || document.write('<script src="js/jquery-1.11.0.min.js"><\/script>')</script>
+  <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+  <script src="js/scripts.js"></script>
+
+
+
+</html>

@@ -1,0 +1,297 @@
+---
+title: "Análisis de Series de Tiempo"
+author: "Leonardo Santella"
+date: "Monday, February 29, 2016"
+output: html_document
+---
+
+Para la realización de esta tarea vamos a necesitar  cargar en el entorno de R ciertas librerias y además, asignar un directorio de trabajo.
+
+
+```{r, echo=TRUE}
+#Asignacion del directorio de trabajo
+#setwd("./Asignacion_0")
+
+#Carga de las librerias 
+library(rstudio)
+library(tseries)
+library(forecast)
+
+#Cargamos el archivo con las funciones para el calculo de los errores
+source("lib_st_error.R")
+```
+---
+
+Ahora procedemos a la carga de los datos y conversión de los mismos en series de tiempo (ts).
+
+
+```{r, echo=TRUE}
+#Carga de datos
+cajero1 <- read.table("cajero102.txt", 
+                          sep="\n", 
+                          col.names=c("Efectivo Diario"), 
+                          fill=FALSE, 
+                          strip.white=TRUE)
+
+cajero2 <- read.table("cajero105.txt", 
+                      sep="\n", 
+                      col.names=c("Efectivo Diario"), 
+                      fill=FALSE, 
+                      strip.white=TRUE)
+
+#conversión de los data.frame a ts (time-series)
+cajero1 <- ts(cajero1, start=c(2010,1), frequency=365)
+cajero2 <- ts(cajero2, start=c(2010,1), frequency=365)
+summary(cajero1)
+summary(cajero2)
+```
+
+En el código anterior se transformaron 2 series de tiempo, ambas inician en el ano 2010,el día 1, con una frecuencia de 365 observaciones por período, es decir, cada obsevación será tomada en cuenta como un día y un período estará conformado por 365 días. 
+
+En el análisis de serie de tiempo, una de las acciones principales es graficar la(s) serie(s) a analizar. A continuación el gráfico de cada una de las series.
+
+```{r, echo=TRUE}
+#Grafico de las series de tiempo
+plot(cajero1, ylab="Efectivo Diario Cajero1")
+plot(cajero2, ylab="Efectivo Diario Cajero2")
+plot(cajero1/1000, ylab="Miles de unidades(Dinero en efectivo) Diarias Cajero1")
+plot(cajero2/1000, ylab="Miles de unidades (Dinero en efectivo) Diario Cajero2")
+cajero1 <- cajero1/1000
+cajero2 <- cajero2/1000
+```
+
+En la gráfica de la serie de tiempo del cajero1, podemos darnos cuenta que no existen suficientes observaciones para completar un período. Además también se puede observar que los valores oscilan alrededor de un valor constante. Esto en principio, podría llevarnos a pensar que ambas series son estacionarias. 
+
+Los últimos 2 gráficos son las series pero esta vez todos sus valores fueron dividos entre mil (1000) con el fin de evitar errores por overflow en los análisis posteriores.
+
+```{r, echo=TRUE}
+#Diagnostico de la serie de tiempo cajero1
+
+#Descomposicion de la serie de tiempo a traves de un suavizado
+
+#Solo se obtuvo la tendencia, ya que la estacionalidad no fue posible
+cajero1.filtro1 <- filter(cajero1, filter=rep(1/20, 20))
+cajero1.filtro2 <- filter(cajero1, filter=rep(1/40, 40))
+cajero1.filtro3 <- filter(cajero1, filter=rep(1/70, 70))
+cajero1.lm <- lm(cajero1~time(cajero1))
+plot(cajero1)
+lines(cajero1.filtro1, col="red")
+lines(cajero1.filtro2, col="blue")
+lines(cajero1.filtro3, col="green")
+abline(cajero1.lm)
+
+#Residuales con variacion estacional
+cajero1.residuals <- cajero1 - cajero1.filtro2
+plot(cajero1.residuals)
+
+#Correlacion Simple y parcial
+acf(cajero1)
+pacf(cajero1)
+
+#Primeras diferencias del cajero1
+adf.test(cajero1)
+cajero1.diffs1 = diff(cajero1)
+plot(cajero1.diffs1)
+cajero1.diffs2 = diff(cajero1.diffs1)
+plot(cajero1.diffs2)
+
+#Test de normalidad
+hist(cajero1, prob=T, col='grey')
+mu.cajero1 = mean(cajero1)
+sd.cajero1 = sd(cajero1)
+lines(density(cajero1), lwd=5)
+x <- seq(1000, 15000, length=273)
+y<- dnorm(x, mu.cajero1, sd.cajero1)
+lines(x,y,lwd=5,col='red')
+shapiro.test(cajero1)
+hist(cajero1.diffs1, prob=T, col='blue')
+mu.diffs1 = mean(cajero1.diffs1)
+sd.diffs1 = sd(cajero1.diffs1)
+lines(density(cajero1.diffs1), lwd=5)
+x <- seq(-10000,10000, length=273)
+y<- dnorm(x, mu.diffs1, sd.diffs1)
+lines(x,y,lwd=5,col='red')
+shapiro.test(cajero1.diffs1)
+
+#Peridiograma del cajero 1
+cajero1.peridiograma <- spec.pgram(cajero1)
+plot(cajero1.peridiograma)
+cajero1.peridiograma$freq
+cajero1.peridiograma$spec
+order(cajero1.peridiograma$spec, cajero1.peridiograma$freq, decreasing = TRUE)
+max1 <- cajero1.peridiograma$freq[19]
+max1
+max2 <- cajero1.peridiograma$freq[41]
+max2
+max3 <- cajero1.peridiograma$freq[82]
+max3
+abline(v = max1, lty = "dotted", col = "red")
+abline(v = max2, lty = "dotted", col = "blue")
+abline(v = max3, lty = "dotted", col = "green")
+periodo1 <- 365/max1
+periodo1
+abline(v = max2, lty = "dotted", col = "blue")
+periodo2 <- 365/max2
+periodo2
+periodo3 <- 365/max3
+periodo3
+```
+
+
+Claramente, la serie cajero1, no contiene suficientes observaciones para estudiar algun tipo de variación estacional, sin embargo, se evidencia que existe cierta ciclicidad en las observaciones (R contempla la variación cíclica dentro del componente de variación estacional) de modo que asumiremos que tiene variación cíclica.
+
+Al observar el ajuste por regresión lineal, de la tendencia de las primeras diferencias es una línea recta sin pendiente, podemos inferir que la serie de tiempo es integrada de orden 0 (I(0)) y además, podriamos pensar que estamos en presencia de una serie estacionaria en la media (la media no varía segun el tiempo). Luego, se realizó un test de Dickey-Fuller aumentado, que demuestra que la serie es normal. El test de Dickey-Fuller aumentado toma como hipótesis nula que la serie es estacionaria. Este es un test de raices unitarias (unit root test).
+
+Los gráficos de correlación simple y parcial, denotan que la correlación entre una obsevación y otra oscila alrededor de 0. En base esto podriamos inferir que estamos en presencia de un proceso de medias moviles autorregresivo (ARMA).
+
+En el gráfico de la distribución de las primeras diferencias, podemos inferir que la variación entre observaciones consecutivas, tiene una distribución normal. Sin embargo, luego se realizó el test de Shapiro-Wilky, en el que se plantea como hipótesis nula que las variaciones consecutivas en la serie tienen una distribución normal. Al realizarlo, el p-valor fue bastante pequeno, de modo que se acepta la hipótesis nula. Al reafirmar con el test, asumiremos que las diferencias tienen una distribución normal.
+
+En el peridiograma, se observó que los periodos mas importantes son 15, 7 y 3, aproximadamente.
+
+```{r, echo=TRUE}
+#Diagnostico de la serie de tiempo cajero2
+
+#Descomposicion de la serie de tiempo (Modelo aditivo)
+cajero2.add <- decompose(cajero2)
+plot(cajero2.add)
+
+#Correlacion Simple y Parcial del cajero2
+acf(cajero2)
+pacf(cajero2)
+
+#Primeras Diferencias del cajero 2
+adf.test(cajero2)
+cajero2.diffs1 = diff(cajero2)
+plot(cajero2.diffs1)
+cajero2.diffs2 = diff(cajero2.diffs1)
+plot(cajero2.diffs2)
+
+#Test de normalidad del cajero2
+hist(cajero2, prob=T, col='grey')
+mu.cajero2 = mean(cajero2)
+sd.cajero2 = sd(cajero2)
+lines(density(cajero2), lwd=5)
+x <- seq(0, 12000, length=length(cajero2))
+y<- dnorm(x, mu.cajero2, sd.cajero2)
+lines(x,y,lwd=5,col='red')
+shapiro.test(cajero2)
+hist(cajero2.diffs1, prob=T, col='blue')
+mu.diffs1 = mean(cajero2.diffs1)
+sd.diffs1 = sd(cajero2.diffs1)
+lines(density(cajero2.diffs1), lwd=5)
+x <- seq(-10000,10000, length=length(cajero2))
+y<- dnorm(x, mu.diffs1, sd.diffs1)
+lines(x,y,lwd=5,col='red')
+shapiro.test(cajero2.diffs1)
+
+
+#Peridiograma del Cajero 2
+cajero2.peridiograma <- spec.pgram(cajero2)
+plot(cajero2.peridiograma)
+cajero2.peridiograma$freq
+cajero2.peridiograma$spec
+order(cajero2.peridiograma$spec, cajero2.peridiograma$freq, decreasing = TRUE)
+max1 <- cajero2.peridiograma$freq[71]
+max1
+max2 <- cajero2.peridiograma$freq[154]
+max2
+max3 <- cajero2.peridiograma$freq[309]
+max3
+abline(v = max1, lty = "dotted", col = "red")
+abline(v = max2, lty = "dotted", col = "blue")
+abline(v = max3, lty = "dotted", col = "green")
+periodo1 <- 365/max1
+periodo1
+abline(v = max2, lty = "dotted", col = "blue")
+periodo2 <- 365/max2
+periodo2
+periodo3 <- 365/max3
+periodo3
+
+```
+
+En cuanto a la serie de tiempo cajero2, podemos decir que se comporta de una manera similar a la serie cajero1. Es importante destacar que estamos en presencia de 2 series de tiempo que tienen almacenado cuanto efectivo se retira de 2 cajeros automáticos de algún país, de algún banco. Sabiendo esto, tiene un sentido que las series sean similares.
+
+En la serie de tiempo cajero2 si fue posible obtener el componente de variación estacional, ya que existen suficientes observaciones para la descomposición de la serie en un modelo aditivo.
+
+Al aplicar los mismos test y los mismos análisis que la serie de tiempo cajero1, obtuvimos los mismos resultados. En base a esto, asumiremos que la serie de tiempo es estacionaria, las diferencias tienen una distribución normal. Además, al observar los gráficos de correlación simple y parcial, se asumirá que estamos en presencia de un proceso de medias moviles autorregresivo (ARMA), al igual que la serie de tiempo cajero1.
+
+Al igual que el cajero1 se observó que los periodos mas importantes son 15, 7 y 3, aproximadamente.
+
+
+```{r, echo=TRUE}
+#### Eleccion de Modelos ####
+best.order <- c(0, 0, 0)
+best.aic <- 9999999999
+for( i in 0:3 ){
+  for( j in 0:3 ){
+    fit.aic <- AIC(arima(cajero1, order=c(i,0,j), method="ML"))
+    if( fit.aic < best.aic )
+    {
+      best.order = c(i,0,j)
+      cajero1.best.arma = arima(cajero1, order=best.order)
+      best.aic = fit.aic
+    }
+    
+  }
+}
+
+best.order <- c(0, 0, 0)
+best.aic <- 99999999999
+for( i in 0:3 ){
+  for( j in 0:3 ){
+    fit.aic <- AIC(arima(cajero2, order=c(i,0,j), method="ML"))
+    if( fit.aic < best.aic )
+    {
+      best.order = c(i,0,j)
+      cajero2.best.arma = arima(cajero2, order=best.order, method="ML")
+      best.aic = fit.aic
+    }
+    
+  }
+}
+
+```
+
+Se eligieron 2 modelos ARMA diferentes, uno ARMA(2,2) y el otro ARMA(3,2) para las series cajero1 y cajero2,
+respectivamente. Para la elección del orden, se utilizó el método de máxima similitud acompanado del índice de
+información de Akaike.
+
+```{r, echo=TRUE}
+#### Calculo del Error ####
+
+cajero1.best.arma
+serie.sim1 <- simulate(cajero1.best.arma, future=FALSE, seed=666)
+layout(1:2)
+plot(serie.sim1)
+plot(cajero1)
+residuals <- ER(serie.sim1, cajero2)
+residuals
+
+
+cajero2.best.arma
+serie.sim2 <- simulate(cajero2.best.arma, future=FALSE, seed=666)
+plot(serie.sim2)
+plot(cajero2)
+residuals <- ER(serie.sim2, cajero2 )
+residuals
+layout(1:1)
+```
+
+Para medir el error se utilizó el Error relativo (ER) definido en el archivo cargado al principio ("lib_st_error.R").
+En base a esto, podriamos decir que el modelo escogido para la serie de tiempo cajero1, acumula un menor porcentaje de error.
+
+
+```{r, echo=TRUE}
+#### Prediccion ####
+cajero1.prediccion <- forecast.Arima(cajero1.best.arma, h = 14)
+cajero1.prediccion
+plot.forecast(cajero1.prediccion)
+
+cajero2.prediccion <- forecast.Arima(cajero2.best.arma, h = 14)
+cajero2.prediccion
+plot.forecast(cajero2.prediccion)
+```
+
+Para finalizar, se realizó una predicción de 14 días (2 semanas) y se graficaron los resultados.
+

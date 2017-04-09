@@ -1,0 +1,89 @@
+---
+title: "Informe"
+author: "Leonardo Santella | Simon Saman | Eloy Toro"
+date: "Wednesday, July 08, 2015"
+output: html_document
+---
+
+1.Extraiga el listado de Posts (1000) vinculados con su cuenta de Facebook, almacenando
+en un data frame dichos comentarios (CI1 CI2 facebook posts.csv)
+  R: En principio debemos identificarnos a traves de un token para poder hacer peticiones al API de Facebook. Las lineas de codigo correspodientes a este proceso se encuentran comentadas debido a que no se quiere que se vuelvan a cargar 1000 posts.
+  Luego se puede apreciar, que leemos el archivo .csv antes escrito.
+```{r}
+#fb_oauth<-"CAACEdEose0cBAL1pzfewq352q5LESbKXrffZBZBwWgmQpbKQCQCpJcRp3aaj55bc3adfare7IGpTJIuYLE6urdRZAZB2nrMzpj8RWp5kBshkXoBYG2302wT7D5gNM8VnKjdd8pby2r1By6nXcVlGKAaXd9YarP7uBIVahjQmZC89iYP6y1Eldd0V3MoRyEkeGPJNy5Is9dyfTvIazutP6041gjzmAJ9dPlLyn8OkZD"
+#feeds <- getNewsfeed(fb_oauth, n = 1000)
+#write.csv(feeds, file = "21014872_22022441_23194702_LeonardoSantella_posts.csv")
+#------Fin Autenticacion y descargar de 1000 news feeds--------
+
+posts <- read.csv("21014872_22022441_23194702_LeonardoSantella_posts.csv")
+
+```
+2. Realice las tareas de pre-procesamiento necesarias para mejorar e identificar las palabras
+contenidas en cada post.
+
+```{r, echo=FALSE}
+#Eliminamos los posts NA
+noNA<-na.omit(posts)
+library(tm)
+myCorpus <- Corpus(VectorSource(noNA$x))
+#myCorpus <- tm_map(myCorpus,content_transformer(function(x) iconv(enc2utf8(x), sub='byte')))
+myCorpus <- tm_map(myCorpus, content_transformer(tolower))
+mycorpus <- tm_map(myCorpus,content_transformer(removePunctuation))
+myCorpus <- tm_map(myCorpus,content_transformer(stripWhitespace))
+myCorpus <- tm_map(myCorpus,content_transformer(removePunctuation))
+myCorpus <- tm_map(myCorpus, content_transformer(removeNumbers))
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+myCorpus <- tm_map(myCorpus, content_transformer(removeURL))
+myStopwords <- c(stopwords(kind="es"), stopwords(kind='en'), 'mierda')
+myCorpus <- tm_map(myCorpus, content_transformer(removeWords), myStopwords)
+myCorpsCopy <- myCorpus
+myCorpus <- tm_map(myCorpus, content_transformer(stemDocument), language=("spanish"))
+myTdm <- TermDocumentMatrix(myCorpus,control=list(wordLengths=c(1,Inf)))
+```
+3. Proponga una versi´on MapReduce de funciones que Cuenten cada palabra a lo largo
+de todos los posts.
+
+```{r}
+data <- as.data.frame(unlist(findFreqTerms(myTdm, lowfreq=1)))
+termFrequency <- rowSums(as.matrix(myTdm))
+data$frquency <- termFrequency
+```
+4. Gener´e un grafico de la frecuencia de cada palabra.
+```{r}
+barplot(termFrequency, las=2)
+```
+
+
+5. Aplique algun m´etodo de clasificaci´on para agrupar cada palabra seg´un el criterio
+que elija, por ejemplo palabras (mas frecuentes, medianamente frecuente, inusuales).(justifique
+en el informe).
+  R: En esta parte de la tarea, nos dimos cuenta, a traves de pruebas exhaustivas, que no era posible de una manera eficiente representar todos los terminos en una matriz, y luego clusterizar a traves del metodo de Clasificacion jerarquica. Procedimos a conservar solo una "sparsity" de 98% esto quiere decir que solo se conservara un porcentaje de elementos de la matriz, ya que en un pricipio, la variable myTdm poseia un sparsity=100% sin embargo esto se debe a errores de precision, no significa que todos los elementos son 0.
+```{r}
+myTdm2 <- removeSparseTerms(myTdm, sparse=0.98)
+m2 <- as.matrix(myTdm2)
+distMatrix <- dist(scale(m2))
+fit<-(hclust(distMatrix, method="ward.D"))
+groups <- cutree(fit, k=2)
+```
+
+6. Aplique el algoritmo propuesto por usted al conjunto de entrada e incorpore los grupos
+asignados a cada registro como una nueva columna del data frame, almacen´andolo en
+un nuevo archivo con el nombre CI1 CI2 facebook words grupos.csv
+```{r}
+data <- as.data.frame(unlist(findFreqTerms(myTdm2, lowfreq=1)))
+termFrequency <- rowSums(as.matrix(myTdm2))
+data$frquency <- termFrequency
+data$group <- groups
+write.csv(data, file ="21014872_22022441_23194702_LeonardoSantella_facebook_words.csv")
+```
+
+7. Caracterice los grupos encontrados, identificando por cada uno:
+N´umero de usuarios que lo componen y su porcentaje del total.
+Caracter´ısticas m´as resaltantes y diferenciadoras de cada grupo.
+
+  R: Antes de pasar a caracterizar es importante destacar que no se logro limpiar la data de una forma optima, por razones varias. El trabajo hecho hasta este punto deja en clara envidencia que existen dos grupos diferenciables, para nosotros y su caracteristica diferenciadora es basicamente la frecuencia con respecto al otro grupo.
+  
+  -El grupo 1 presenta ocurrencias desde 15-55, siendo 55 la palabra con mayor frecuencia del estudio
+  -El grupo 2 presenta ocurrencias desde 15-19
+  
+Es bueno resaltar el hecho de que las palabras mas dichas, son palabras que no poseen muchos caracteres, y la palabra mas escrita en los posts, es video dejando en evidencia que los posts con mayor presencia en este facebook, son los videos y los comentarios acerca de estos. Son publicaciones de video, debido a que estamos asumiendo el hecho de que las personas que escriben relativamente a un video, es porque publicaron dicho video en la mayoria de los casos 

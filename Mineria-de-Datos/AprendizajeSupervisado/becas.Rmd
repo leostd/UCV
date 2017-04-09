@@ -1,0 +1,235 @@
+---
+title: "Metodos de Clasificacion"
+author: "Leonardo Santella"
+date: "March 6, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Becas Crema - Métodos de Clasificación en la mineria de datos
+
+Para el cumplimiento de los objetivos planteados, es necesario la instalacion y carga de ciertas librerias y funciones. También es necesario la asignación manual de una semilla aleatoria, para poder reproducir los resultados dependientes de funciones aleatorias.
+
+
+```{r}
+#Installing packages
+# install.packages(c("party",,"rpart"))
+# install.packages("dplyr")
+# install.packages("rattle")
+# install.packages("FactoMineR")
+# install.packages("RColorBrewer")
+# install.packages("rpart.plot")
+# install.packages("RWeka", dependencies = T)
+# install.packages("class")
+# install.packages("rJava")
+
+#Library loading
+library(party)
+library(rpart)
+library(dplyr)
+library(rattle)
+library(FactoMineR)
+library(RWeka)
+library(rJava)
+library(class)
+
+
+
+#Functions
+proportions <- function(x) 
+{
+  if(x == 0)
+    return (prop0)
+  if(x == 1)
+    return (prop1)
+  if(x == 2)
+    return (prop2)
+  if(x == 3)
+    return (prop3)
+}
+
+normalize = function(x)
+{
+  num <- x - min(x)
+  denom <- max(x) - min(x)
+  return (num/denom)
+}
+
+#Set random seed
+set.seed(666)
+```
+
+## Carga del set de datos y preprocesamiento
+
+A continuación, cargaremos el set de datos y se realizarán actividades de preprocesamiento, con el fin de mejorar los resultados del
+posterior análisis.
+
+```{r pressure, echo=FALSE}
+#Loading data
+data <- read.csv("./minable.csv")
+
+
+#Exploring the target class
+unique(data$mIngreso)
+total <- nrow(data)
+prop0 <- sum(data$mIngreso == 0) / total  
+prop1 <- sum(data$mIngreso == 1) / total  
+prop2 <- sum(data$mIngreso == 2) / total  
+prop3 <- sum(data$mIngreso == 3) / total  
+
+#Data preprocessing
+sapply(data,class)
+str(data)
+data <- data[-1,]
+data$fNacimiento <- NULL
+data$jReprobadas <- NULL
+data$pReside <- NULL
+data$dHabitacion <- NULL
+data$cDireccion <-NULL
+data$oSolicitudes <- NULL
+data$aEconomica <- NULL
+data$grOdontologicos <- NULL
+data$sugerencias <- NULL
+```
+
+Al principio se pueden observar las características del conjunto de clases (proporciones dentro del data set).
+
+En el preprocesamiento se observaron los tipos de datos de cada columna y se eliminaron las columnas que no eran numéricas. 
+
+Se eliminó la primera instancia del set de datos, ya que este era el unico individuo que pertenece a una clase. Si dicho individuo es tomado en cuenta en el diseño de los modelos, podría generar ruido adicional en los resultados.
+
+## Muestreo del set de datos - División en set de entrenamiento y set de prueba
+
+Se aplico un muestreo sin remplazo, con un vector de proporciones con la finalidad de mantener las proporciones orginales en ambos set de datos.
+
+```{r }
+#Sampling
+proportions <- apply(as.matrix(data$mIngreso), 1, proportions)
+sampling <- sample(nrow(data), nrow(data)*0.8, prob=proportions, replace=F)
+train <- data[sampling,]
+test <- data[-sampling,]
+```
+
+## Árbol de decisión
+
+El primer modelo de clasificación utilizado fue un arbol de decisión. En principio se diseñó un modelo de arbol de decision de inferencial condicional y luego uno de partición recursiva. Se obtuvieron los mismos resultados con ambos modelos. Sin embargo se eligió el modelo realizado con el metodo de partición recursiva, ya que fue uno de los métodos utilizados en el curso.
+
+```{r}
+#### Decision tree ####
+
+# Conditional Inference tree
+tree <- ctree(formula = mIngreso~.,
+              data = train)
+#Plot ctree
+plot(tree)
+
+#Prediction ctree
+pred.tree <- predict(tree, test, type="node")
+
+#Confusion Matrix ctree. Measuring prediction performance
+perf.tree <- table(test$mIngreso,
+                   pred.tree,
+                   dnn=c("Actual", "Predicted"))
+perf.tree
+
+#Recursive Partition tree
+tree <- rpart(formula = mIngreso ~ .,
+              data = data,
+              method = "class",
+              control = rpart.control(minsplit = 40,
+                                      maxdepth = 4))
+
+#Plot rpart tree
+plot(tree)
+text(tree, 
+     use.n = T)
+
+#Cofusion Matrix rpart tree. Measuring prediction performance
+perf.tree = table(test$mIngreso, 
+                            predict(tree, newdata = test,type = "class"),
+                            dnn = c("Actual", "Predicted"))
+perf.tree
+
+#Hit rate
+hrate.tree <- (perf.tree[1,1] + perf.tree[2,2] + perf.tree[3,3]) / nrow(test)
+hrate.tree <- hrate.tree * 100
+hrate.tree
+```
+
+##K-Vecinos (K-nearest neighbor)
+
+El siguiente modelo que se diseñó, fue realizado a través del método de K-Vecinos. Para la calibración de este modelo fue necesario
+un preprocesamiento extra para nomalizar las dimensiones.
+
+```{r}
+#### K-Nearest Neighbors ####
+
+knn.train <- train
+knn.test <- test
+knn.class.train <- knn.train$mIngreso
+knn.class.test <- knn.test$mIngreso
+knn.test$mIngreso <- NULL
+knn.train$mIngreso <- NULL
+knn.train <- apply(knn.train,2,normalize)
+knn.train <- as.data.frame(knn.train)
+
+#Model and Prediction
+knn <- knn(train = knn.train,
+           test = knn.test,
+           cl = knn.class.train,
+           k=15)
+
+#Performance. Confusion matrix
+perf.knn <- table(knn.class.test, 
+                  knn,
+                  dnn=c("Actual", "Predicted"))
+perf.knn
+
+#Hit rate. K-Nearest Neighbor
+hrate.knn <- (perf.knn[1,1] + perf.knn[2,2]) / nrow(knn.test)
+hrate.knn <- hrate.knn * 100
+hrate.knn
+
+```
+
+##Reglas de Clasificación
+
+Por último, se realizó un modelo de reglas de clasificación. Las reglas fueron generadas a través del algoritmo RIPPER (Repeated Incremental Pruning to Produce Error Reduction)
+
+```{r}
+#### Classification rules ####
+
+#Preprocessing
+crules.train <- train
+crules.test <- test
+crules.train$mIngreso <- as.factor(crules.train$mIngreso)
+crules.test$mIngreso <- as.factor(crules.test$mIngreso)
+
+#Model
+crules <- JRip(formula = mIngreso ~ .,
+               data = crules.train)
+
+#Performance. Confusion Matrix
+perf.crules <- table(crules.test$mIngreso, 
+                     predict(crules,
+                             newdata=crules.test),
+                     dnn=c("Actual", "Predicted"))
+perf.crules
+
+#Hit rate. CRules
+hrate.crules <- (perf.crules[1,1] + perf.crules[2,2]) / nrow(crules.test)
+hrate.crules <- hrate.crules * 100
+hrate.crules
+
+```
+
+##Comparación de modelos
+
+```{r}
+#Comparacion de modelos
+hrate <- rbind(hrate.tree, hrate.knn, hrate.crules)
+hrate
+```

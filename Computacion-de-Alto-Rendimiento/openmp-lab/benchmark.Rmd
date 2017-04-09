@@ -1,0 +1,54 @@
+---
+title: "Benchmark"
+author: "Leonardo A. Santella"
+date: "November 9, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introducción
+
+  Se requiere la realización de gráficos comparativos en cuanto a los tiempos arrojados por el comando 'time' de la consola de Linux, al ejecutar un programa que realiza una suma de vectores/matrices en secuencial, versus, otro programa que realiza la misma tarea, pero de forma paralela.
+  
+  El paralelismo fue implementado con las primitivas de OpenMP. El Sistema Operativo utilizado fue Ubuntu 16.04 LTS. El Procesador utilizado para el experimento fue un Intel Core i7.
+
+## Comparación
+
+  A continuación, se encuentra la declaración de los vectores de datos obtenidos en el experimento
+```{r variables}
+user_parallel = c(0, 0, 0, 0, 0.02, 0.21, 2.04, 20.82)
+user_seq = c(0, 0, 0, 0, 0, 0.05, 0.26, 2.09)
+cpu_parallel = c(0, 0, 0, 0, 0.04, 0.47, 4.58, 50.26)
+cpu_seq = c(0, 0, 0, 0, 0, 0, 0.02, 0.05)
+elapsed_parallel = c(0, 0, 0, 0, 0.02, 0.21, 2.04, 20.82)
+elapsed_seq = c(0, 0, 0, 0, 0, 0.05, 0.29, 2.11)
+```
+
+## Tiempo de ejecución en segundos
+
+El color azul caracteriza a los tiempos del programa en paralelo y las líneas de color rojo identifican a los tiempos del programa ejecutado de forma secuencial.
+
+```{r, echo=FALSE}
+plot(user_parallel, type = "o", col = "blue", ylab = "Tiempo de ejecucion en modo usuario", xlab = "Log10(Tamaño del vector)")
+lines(user_seq, type = "o", col="red")
+```
+
+```{r, echo=FALSE}
+plot(cpu_parallel, type = "o", col = "blue", ylab = "Tiempo de ejecucion en modo kernel", xlab = "Log10(Tamaño del vector)")
+lines(cpu_seq, type = "o", col="red")
+```
+
+```{r, echo=FALSE}
+plot(elapsed_parallel, type = "o", col = "blue", ylab = "Tiempo de ejecucion", xlab = "Log10(Tamaño del vector)")
+lines(elapsed_seq, type = "o", col="red")
+```
+
+Es importante resaltar que existen casos en donde la ejecución en modo kernel sobrepas los tiempos de ejecución per se.
+
+## Conclusión
+  Al observar los gráficos es posible afirmar que en este caso, los tiempos de ejecución fueron mejores (menores) de manera que podría pensarse en que se deben evaluar los cuellos de botella generados por la ejecución paralela. Un posible cuello de botella es los constanstes cambios de constexto ejecutados por el sistema operativo en modo kernel.

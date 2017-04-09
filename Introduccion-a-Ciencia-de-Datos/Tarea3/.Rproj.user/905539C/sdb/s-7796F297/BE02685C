@@ -1,0 +1,17 @@
+{
+    "contents" : "library(FactoMineR)\n\ndata <- read.csv(\"Servicio_al_cliente.csv\", header=TRUE, sep=\";\", dec=\",\", row.names=1)\nsummary(data)\ndim(data)\n\ndata2<-data\ndata2$Nombre.Cliente <- NULL\ncomponentes <- prcomp(data)\ncomponentes\nbiplot(componentes)\nbiplot(prcomp(data2, na.rm=TRUE, header=TRUE))\nPCA(data2)\ncorr<-cor(data2)\ncorr\ncomp<-princomp(data)\ncomp\ncomp$loadings\n",
+    "created" : 1437851263973.000,
+    "dirty" : true,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3345282292",
+    "id" : "BE02685C",
+    "lastKnownWriteTime" : 1437852734,
+    "path" : "~/Data Science/Tarea3/source.R",
+    "project_path" : "source.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "source_on_save" : false,
+    "type" : "r_source"
+}

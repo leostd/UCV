@@ -1,0 +1,317 @@
+---
+title: "Aprendizaje No Supervisado - Mineria de Datos"
+author: "Leonardo Santella"
+date: "Tuesday, April 05, 2016"
+output: html_document
+---
+
+## Introducción
+
+  En el área de ´Machine Learning´ (Aprendizaje automático en español), el aprendizaje No-Supervisado es la tarea encargada de encontrar estructuras desconocidas a priori, que se encuentran en un conjunto de datos. Se desconocen las estructuras intrínsecas del conjunto de datos debido a la ausencia de un atributo que de alguna manera guie (supervise) la formación de dichas estructuras.
+
+  
+  ´Clustering´ (agrupación en español) es una de las técnicas aplicadas en el aprendizaje No-Supervisado. En la actividad, se nos provee de una serie de conjuntos de datos y se requiere que apliquemos las técnicas ´clustering´ vistas en clases, de manera selectiva. Se debe argumentar cada decisión tomada en la realización de la actividad.
+
+
+## Carga de librerias y conjuntos de datos
+
+```{r}
+#Biblioteca de graficacion 3D
+library(rgl)
+library(FactoMineR)
+library(scatterplot3d)
+#Archivo de funciones definidas
+source("funciones.R")
+
+#Loading Datasets
+a = read.csv("a.csv", header = F)
+a_big = read.csv("a_big.csv", header = F)
+good_luck = read.csv("good_luck.csv", header = F)
+guess = read.csv("guess.csv", header = F)
+h = read.csv("h.csv", header = F)
+help = read.csv("help.csv", header = F)
+moon = read.csv("moon.csv", header = F)
+s = read.csv("s.csv", header = F)
+
+```
+
+# Análisis Exploratorio de los datos
+
+```{r}
+summary(a)
+summary(a_big)
+summary(good_luck)
+summary(guess)
+summary(h)
+summary(help)
+summary(moon)
+summary(s)
+```
+
+  En la actividad, se indica que a excepción del set de datos guess.csv, la última columna es la clase. Se nos provee de una columna clase para poder evaluar los modelos de ´clustering´ a través de una matriz de confusión.
+
+  Por convención en esta actividad, la asignación de las clases y posteriormente, de los grupos, serán números enteros mayores que 0. En algunos datasets, la columna clase tiene valores reales y negativos.
+  
+  Además, se nos indica que en algunos conjuntos de datos, debemos aplicar reglas para la elección de la clase, según
+un intervalo.
+
+  Los conjuntos de datos que se deben aplicar reglas para la asignación de una clase, son h, help y s. Para esto, graficaremos un histograma de frecuencia, y asignaremos intervalos equidistantes para la asignación de una clase.
+
+```{r}
+# Datasets en las que se deben aplicar reglas para asignar clases
+g1 = list(help, s, h)
+names = c("help", "s", "h")
+layout(1:3)
+histograms = list()
+clases = list()
+j = 1
+for ( i in g1 ){
+  histograms[[j]] = hist( i$V4, main = names[j],xlab =  "Clase")
+  clases[[j]] = asignarClase(histograms[[j]]$breaks, i$V4)
+  j = j + 1
+}
+# Las clases fueron asignadas de acuerdo a intervalos equidistantes
+help$clase = clases[[1]]
+s$clase = clases[[2]]
+h$clase = clases[[3]]
+
+```
+  
+  La razón por la que se escogieron clases derivadas de intervalos con rangos iguales (equidistantes) es que al ver el histograma de frecuencia, podría inferirse que la columna de clase fue generada a través de una variable aleatoria con distribución uniforme. Por esa razón, la cantidad de elementos de cada clase debe ser parecida. 
+
+  Las clases fueron asignadas desde 1 hasta el máximo entero de la secuencia generada por la cardinalidad de los cortes. 
+
+  El resto de los conjuntos de datos que poseen una clase, están definidos desde el número 0. Esto puede traer confusiones al momento de evaluar el modelo de clustering.
+
+```{r}
+g2 = list(a, a_big, good_luck, moon)
+a$clase = a$V3 +1
+a_big$clase = a_big$V3 + 1
+good_luck$clase = good_luck$V11 + 1
+moon$clase = moon$V3 + 1
+```
+  
+  El único set de datos que no tiene una clase ya definida, es guess.csv. Luego, para determinar el número de conglomerados, se determinará el k, que acumule menos error, a fin de maximizar las distancias inter-cluster (como consecuencia, se minimizan las distancias intra-cluster).
+
+```{r}
+summary(help)
+```
+
+  Luego de asignar la clase correspondiente al conjunto de datos help, y posteriormente, realizar un grafico 3D interactivo a través de la biblioteca rgl, es notable que las clases no están bien asignadas. En el gráfico se puede ver que ambas letras S (ya que es una representación de las siglas SOS, en R^3) tienen las mismas clases.
+
+  Este problema esta sujeto a la interpretación del analista. En este caso, la forma en que se solucionará el problema, es asignando una clase a cada letra.
+
+NOTA: Para poder visualizar lo realizado, es necesario correr la sección de código "Help New Class", el archivo script.R.
+
+```{r}
+help$clase2 = 0
+help[ 1:1000, ]$clase2 = 1
+help[ 1001:2000, ]$clase2 = 2
+help[ 2001:3000, ]$clase2 = 3
+```
+
+  A continuación observaremos el dataset "guess.csv" y aplicaremos el codo de Jambú para escoger el número de clústeres que minimice la distancia intra-cluster, sin sobreajuste.
+  
+```{r}
+summary(guess)
+ss = 1:20
+for( i in 1:20){
+  modelo = kmeans(x = guess, centers = i, iter.max = 20)
+  ss[[i]] = modelo$tot.withinss
+}
+plot(1:20, ss, xlab = "Clusters", ylab = "Distancia intra clusters total",type = "b")
+kGuess = 5
+```
+
+  En el gráfico podemos observar que 5 es el número que refleja menor intra-cluster. A partir del 5, los cambios no son significativos. Por lo tanto, escogeremos k = 5 clústeres para el definir el modelo.
+
+```{r}
+#Analizando Good_luck.csv
+summary(good_luck)
+pairs(good_luck[,-c(11,12)], col=good_luck$clase)
+pca = PCA(good_luck[,-c(11,12)])
+pca$eig
+```
+  Al realizar el gráfico 2 a 2 de las variables del set de datos, y además, aplicando un análisis de componentes principales, nos podemos dar cuenta, que los datos parecen no ser separables. Por lo tanto, no existe alguna manera de detectar con una precisión aceptable, los elementos de una clase o de otra. 
+  
+  Sin embargo, aplicaremos un modelo de "clustering" para dar soporte de lo anterior.
+  
+NOTA: Para observar el análisis exploratorio de los otros conjuntos de datos, correr la sección de código correspondiente al análisis exploratorio de cada uno.
+
+# Definición de Modelos
+
+## Dataset a.csv
+  En este conjunto de datos, podemos observar que solo posee 2 dimensiones (2 features) y por lo tanto podemos graficarlo en un plano.
+
+```{r}
+plot(a$V1, a$V2, col=a$clase, main="Dataset a.csv")
+```
+  
+  Como podemos observar, los puntos están definidos 3 nubes de puntos, que tienen aproximadamente una forma circular.
+  
+  Debido a la forma de las nubes de puntos, podemos decir que tanto la técnica de clusterización K-Medias como Clusterización Jerárquica tomando la máxima distancia ("complete"), generaran buenos modelos. Sin embargo, aplicaremos K-Medias, ya que nos beneficiaremos de los centroides generados por el algoritmo, para establecer un punto de partida en el algoritmo que aplicaremos en el dataset a_big.csv, ya que este posee una distribución similar, pero tiene una dimensionalidad 100 veces mayor.
+  
+NOTA: El algoritmo utilizado se encuentra definido en el archivo funciones.R
+
+  
+```{r}
+a.model = kMeans(a[,c(1,2)], centers=3, max.iter=50)
+plot(a$V1, a$V2, col=a.model[[2]], main="a.csv")
+points(a.model[[1]], pch=19, col=4)
+```
+
+## Dataset a_big.csv
+  Este conjunto de datos posee una distribución similar al anterior. Su dimensionalidad es 100 veces mayor en cuanto a las filas. Además, su nombre es un hint.
+  
+  Para la definición de un modelo de clusterización para este dataset, utilizaremos el algoritmo de K-Medias, pero iniciando con los centroides obtenidos en el modelo anterior.
+  
+```{r}
+a_big.model = kMeans(a_big[,c(1,2)], centers=3, max.iter=50, centros=a.model[[1]])
+plot(a_big$V1, a_big$V2, col=a_big.model[[2]], main="a_big.csv")
+points(a_big.model[[1]], pch=19, col=4)
+```
+
+## Dataset good_luck.csv
+  Anteriormente, en el análisis exploratorio, es notable que el set de datos posee más de tres dimensiones. Al observar los gráficos de dispersión 2 a 2, se puede llegar a la conclusión que ninguna técnica de clusterización vista en clase podrá generar un modelo aceptable. Esto se debe a que al parecer, los puntos que pertenecen a cada clase, no son separables, quizás en alguna dimensión superior se puede lograr un modelo aceptable, sin embargo no sabemos cómo lidie dicho modelo el problema de sobreajuste. 
+
+  Aplicaremos un modelo de K-Medias, para observar los resultados y analizar el rendimiento luego, con el fin de dar soporte a lo anterior.
+
+  
+```{r}
+good_luck.model = kmeans(good_luck[,-c(11,12)], centers=2, iter.max=20)
+plot(good_luck[,-c(11,12)], col=good_luck.model$cluster)
+```
+
+  En el gráfico podemos ver como los puntos que pertenecen a un clúster o a otro, están sobrepuestos, por lo tanto, la precisión no será aceptable.
+  
+## Dataset guess.csv
+  El dataset guess.csv, no posee una columna con las clases, sin embargo, determinamos que es posible aplicar una implementación de K-Medias y además, que con k=5, se minimiza la distancia intra-cluster de manera aceptable. A partir de k>5, no existen grandes diferencias.
+  
+  Para este set de datos, no podremos evaluar su rendimiento ya que no tenemos una columna clase con la cual comparar, a través de una matriz de confusión.
+
+```{r}
+guess.model = kmeans(guess, centers = 5, iter.max=30)
+guess$cluster = guess.model$cluster
+plot(guess$V1, guess$V2, col=guess$cluster)
+points(guess.model$centers, pch=19, col=6, main="Dataset guess.csv")
+```
+
+## Dataset h.csv
+  Este conjunto de datos posee 3 dimensiones, al graficarlo (en script.R), se observa que posee una forma de espiral, y en ese espiral, están repartidos los clústeres en una forma rectangular. Para este set de datos, utilizaremos el algoritmo de clusterización jerárquica, sin embargo, los clústeres poseen formas arbitrarias que hacen que ningún modelo visto en clase tenga una precisión aceptable.
+  
+```{r}
+h.distance.matrix = dist(as.matrix(h[,c(1,2,3)]))
+h.model = hclust(h.distance.matrix, method="complete")
+h.corte = cutree(h.model, 11)
+scatterplot3d(h$V1, h$V2, h$V3, color=h.corte, pch=19, main="Dataset h.csv")
+```
+
+## Dataset h.csv
+  Este dataset, es similar al anterior (h.csv) en cuanto dimensionalidad, pero se diferencian en la figura formada. Esta figura, es una figura arbitraria (tiene forma de "s"), de manera que es posible que no se genere un modelo con la precisión requerida.
+  
+```{r}
+s.distance.matrix = dist(as.matrix(s[,c(1,2,3)]))
+s.model = hclust(s.distance.matrix, method="complete")
+s.corte = cutree(s.model, 10)
+scatterplot3d(s$V1, s$V2, s$V3, color=s.corte, pch=19, main="Dataset s.csv")
+```
+
+## Dataset help.csv
+  El set de datos help.csv, es una combinación de los 2 anteriores. Está compuesto por la unión de 2 set de datos s (s.csv) y un h (h.csv) trasladados y colocados en un mismo espacio 3D. 
+  
+  Al ver el gráfico, es evidente que cada letra puede ser tomada como un clúster, y luego, aplicar otro modelo de clusterización, dependiendo si el punto pertenece a una s o a la h.
+  
+  Se utilizará el algoritmo de clusterización jerárquica con el método "single", ya que cada letra (clúster en forma de letra), podría ser perfectamente cubierta por la forma de un rectángulo, que es una de las situaciones en donde el método se comporta de una manera adecuada.
+
+```{r}
+help.distance.matrix = dist(as.matrix(help[,c(1,2,3)]))
+help.model = hclust(help.distance.matrix, method="single")
+help.corte = cutree(help.model,3)
+scatterplot3d(help$V1, help$V2, help$V3, color=help.corte, pch=19, main="Dataset help.csv")
+```
+
+## Dataset moon.csv
+  Este conjunto de datos, está formado por puntos en 2 dimensiones. Los puntos que pertenecen a diferentes clases se agrupan en clústeres que no tienen forma esférica, por lo que la técnica de clusterización jerárquica con el método "single" deberá mostrar resultados adecuados.
+  
+```{r}
+moon.distance.matrix = dist(as.matrix(moon[,c(1,2)]))
+moon.model = hclust(moon.distance.matrix, method="single")
+moon.corte = cutree(moon.model, 2)
+plot(moon$V1, moon$V2, col=moon.corte, main="Dataset moon.csv")
+```
+
+#Evaluación de modelos
+
+La evaluación de los modelos, será basada en la matriz de confusión generada por la columna de clase y el número de clúster asignado por el modelo de clusterización a cada observación. Si la matriz es 2x2, se asumirá como clase (clúster en este caso) objetivo a "1", y se realizará el cálculo de la sensibilidad, precisión, y F1 Score.
+
+##K-Medias - a.csv
+```{r}
+a.conf = table(a$clase, a.model[[2]], dnn=c("Clase", "Cluster"))
+a.conf = fix.conf.table(a.conf)
+a.conf
+eval.conf.matrix(a.conf)
+```
+
+##K-Medias - a_big.csv
+```{r}
+a_big.conf = table(a_big$clase, a_big.model[[2]], dnn=c("Clase", "Cluster"))
+a_big.conf = fix.conf.table(a_big.conf)
+a_big.conf
+eval.conf.matrix(a_big.conf)
+```
+
+##K-Medias - good_luck.csv
+```{r}
+good_luck.conf = table(good_luck$clase, good_luck.model$cluster, dnn=c("Clase", "Cluster"))
+good_luck.conf = fix.conf.table(good_luck.conf)
+good_luck.conf
+eval.conf.matrix(good_luck.conf)
+```
+
+##Clusterización Jerarquica Complete Link - h.csv
+```{r}
+h.conf = table(h$clase, h.corte, dnn=c("Clase", "Cluster"))
+h.conf = fix.conf.table(h.conf)
+h.conf
+eval.conf.matrix(h.conf)
+```
+
+##Clusterización Jerarquica Complete Link - s.csv
+```{r}
+s.conf = table(s$clase, s.corte, dnn=c("Clase", "Cluster"))
+s.conf = fix.conf.table(s.conf)
+s.conf
+eval.conf.matrix(s.conf)
+```
+
+##Clusterización Jerarquica Single Link - help.csv
+```{r}
+help.conf = table(help$clase2, help.corte, dnn=c("Clase", "Cluster"))
+help.conf = fix.conf.table(help.conf)
+help.conf
+eval.conf.matrix(help.conf)
+```
+
+##Clusterización Jerarquica Single Link - moon.csv
+```{r}
+moon.conf = table(moon$clase, moon.corte, dnn=c("Clase", "Cluster"))
+moon.conf = fix.conf.table(moon.conf)
+moon.conf
+eval.conf.matrix(moon.conf)
+```
+
+#Conclusión
+
+  En los modelos obtenidos luego de aplicar K-Medias en los dataset a.csv y a_big.csv, se obtuvieron muy buenos resultados. Esto se debe a que los clústeres tienen una forma esférica. Es importante resaltar que una esfera en 2 dimensiones, es una circunferencia (o un círculo).
+  
+  Los resultados obtenidos luego de aplicar K-Medias al dataset good_luck.csv, nos damos cuenta que el modelo acertó el 50% de las veces, sin embargo, esto es equivalente a lanzar una moneda justa y clasificar en base al resultado. Este resultado es coherente, ya que los puntos que pertenecen a las 2 clases proporcionadas, están mezclados entre sí, de manera que dificulta la toma de decisión a la hora de asignar el clúster correcto.
+  
+  El dataset guess.csv no fue evaluado, ya que no teníamos una variable para contrastar los resultados.
+  
+  Los modelos obtenidos luego de aplicar clusterización jerárquica en los datasets h.csv y s.csv, generan una matriz de confusión que indica que los modelos aciertan un 30% de las veces, esto no es del todo deseable. El resultado es consecuencia de que los clústeres tenían una forma arbitraria, y como consecuencia, los algoritmos vistos en clase, no se adaptan correctamente a estas situaciones. Para estas situaciones, se recomiendan algoritmos como Kernel K-Means y Spectral Clustering.
+  
+  El modelo generado para el dataset help.csv, se comporta de manera perfecta, al igual que el modelo generado para el set de datos moon.csv. Ambos conjuntos de datos, presentan agrupaciones con formas a las que el algoritmo de clusterización jerárquica se adapta perfectamente.
+  
+#Consideraciones
+  Las funciones utilizadas y que no están expuestas explicitamente en este informe, se encuentran definidas en el archivo funciones.R.
+

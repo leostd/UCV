@@ -1,0 +1,215 @@
+---
+title: 'Asignación #2 - TACD'
+author: "Leonardo Santella"
+date: "April 3, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introducción 
+
+En la actualidad, la mayoria de los grandes sistemas de software, manejan una gran cantidad de datos. Esta cantidad sobrepasa por
+mucho la cantidad de memoria RAM que podría tener un solo computador. En base a esto, tuvo que reestructurarse la forma en que los
+datos eran tratados (almacenamiento, procesamiento, extracción, etc), como consecuencia, nuevas tecnologias emergierión. Las
+tecnologías mas influyentes en este ambito, fueron aquellas que utilizaban (y actualmente, utilizan) 'Sistemas de archivos distribuidos'. 
+
+Hadoop es un framework de software que soporta aplicaciones distribuidas bajo una licencia libre. Permite a las aplicaciones trabajar con miles de nodos y petabytes de datos. Hadoop se inspiró en los documentos Google para MapReduce y Google File System (GFS). Hadoop es un proyecto de alto nivel Apache que está siendo construido y usado por una comunidad global de contribuyentes, mediante el lenguaje de programación Java. Yahoo! ha sido el mayor contribuyente al proyecto, y usa Hadoop extensivamente en su negocio.
+
+R es un entorno y lenguaje de programación con un enfoque al análisis estadístico. R es una implementación de software libre del lenguaje S pero con soporte de alcance estático. Se trata de uno de los lenguajes más utilizados en investigación por la comunidad estadística, siendo además muy popular en el campo de la minería de datos, la investigación biomédica, la bioinformática y las matemáticas financieras. A esto contribuye la posibilidad de cargar diferentes bibliotecas o paquetes con funcionalidades de cálculo o graficación.
+
+RHadoop es una colección de 5 paquetes de R, que permite a los usuarios manipular y analizar datos con Hadoop. Su funcionamiento
+es similar a una interfaz entre R y Hadoop. Este es un proyecto bastante reciente, por lo cual carece de documentación.
+
+En la asignación, se requiere que realizamos el cálculo de una multiplicación matriz-vector, asumiendo que el vector no puede ser
+almacenado por completo en la memoria y por lo tanto, debamos usar un enfoque distribuido para solución del problema. 
+
+Como problema secundario, se requiere realizar el cálculo de una multiplicacion matriz-matriz utilizando el paradigma de
+programación Map-Reduce, utilizado en sistemas distribuidos.
+
+## Multiplicacion Matriz-Vector
+
+En este caso, asumiremos que el vector ni la matriz en cuestión no pueden ser almacenados por completo en memoria principal (como lo
+es requerido en el enunciado).
+
+En principio, se nos proporcionó una función que permite el cálculo de una multiplicación matriz-vector, pero dicho vector, si
+podría ser almacenado en su totalidad en memoria principal. A esta función se le realizaron algunas modificaciones, para su 
+reutilización.
+
+Basicamente, el problema requiere dividir el vector y la matriz de gran tamaño, en porciones, las cuales si pueden ser almacenadas en memoria, y de alguna manera, acumular resultados parciales, que a traves de alguna operación, conformen el resultado final.
+
+En el siguiente snippet de código se colocan las funciones utilizadas para lograr este requerimiento.
+
+```{r}
+MultMV_1.mr.modif <- function( M, V) {
+  
+  d <- values(from.dfs(V))
+  f <- function(x){return(x[3]*d[ d$X == x[2],2])}
+  
+  map <- function(.,m) {
+    i <- m[1]
+    m <- as.matrix(m)
+    valor <- apply(m,1,f)
+    valor <- as.data.frame(as.numeric(as.character(valor)))
+    return( keyval(i, valor) )
+  }
+  
+  reduce <- function(i, xi) { 
+    keyval(i, sum(xi))
+  }
+  
+  calc <- mapreduce(input=M, 
+                    #output=output, 
+                    #input.format="text", 
+                    map=map, 
+                    reduce=reduce,
+                    verbose = FALSE)
+  calc
+}
+
+## Esta funcion retorna una lista, que contiene 2 listas, una contiene las referencias en un dfs
+##de las partes de la matriz y otra lista contiene las referencias en un dfs, de las partes del 
+##vector
+mat.vec.division = function(M,V,n,k)
+{
+  #Asumimos que el vector y la matriz son cuadradas, en caso contrario se emitira
+  #un error y se detendra la ejecucion.
+  if( nrow(M) != n*n )
+    stop('La matriz no es cuadrada.')
+  if( nrow(V) != n )
+    stop('El vector no tiene el numero adecuado de filas.')
+  if( n %% k != 0 )
+    stop('El k seleccionado no genera submatrices cuadradas.')
+  block.size = n/k
+  vec.parts = list()
+  mat.parts = list()
+  l = 1
+  ## Se crean listas con las referencias respectivas de cada parte del vector y la matriz, respectivamente
+  for( i in 1:k){
+    lim.inf.f = (((i-1)*block.size)+1)
+    lim.sup.f = i*block.size
+    vec.parts[[i]] = to.dfs(V[ V$X>=lim.inf.f & V$X<=lim.sup.f, ])
+    mat.parts[[i]] = to.dfs(M[ M$j<=lim.sup.f & M$j>=lim.inf.f, ])
+  }
+  result = list()
+  result[[1]] = mat.parts
+  result[[2]] = vec.parts
+  return (result)
+}
+
+## Funcion que multiplica una matriz y un vector cuando ambos no
+## caben en la memoria y se encuentran en HDFS
+MultMV_2.mr = function(M, V)
+{
+  #En este caso, M y V son listas que referencian a las submatrices(M) y a los subvectores(V)
+  k = length(V)
+  mids = list()
+  for( i in 1:k ){
+    mids[[i]] = MultMV_1.mr.modif(M[[i]], V[[i]])
+  }
+  result = gather(mids, reduce=function(k,v){keyval(k, sum(v))})
+  from.dfs(result)
+}
+```
+
+## Multiplicación Matriz-Matriz.
+
+  Para la realizacion de esta multiplicación, se requiere utilizar el paradigma Map-Reduce, utilizando los paquetes rmr2 y rhdfs de RHadoop.
+  
+  En el cálculo, asumiremos que ambas matrices estan en un dfs.
+  
+  La solución viene dada de la siguiente manera: sea A una matriz nxm, sea B una matriz mxp. Representadas por tuplas (i,j,mij), siendo i el número de la fila y j el número de la columna de la entrada de la matriz mij. Ambas matrices referenciadas por separado en un dfs. Se realiza un proceso Map para la matriz A, con la finalidad de formar nxmxp tuplas clave-valor ((i,k), ('A', j, mij)) donde k = 1,2,...p. Se realiza un proceso Map para la matriz B, con la finalidad de formar mxpxn tuplas clave-valor ((i,k), ('B', j, mij)) donde i = 1,2,...m, k es el número de la columna y j el número de la fila de la entrada mij.
+  
+  Luego, ambas referencias, son unidas (de 2 archivos, se produce 1, en un dfs) y se aplica un proceso Reduce. El el proceso reduce, se obtienen listas asociadas a las claves (i,k), estos valores vienen dados por las tuplas de la matriz A o B. Para obtener el resultado de la multiplicacion, es necesario multiplicar los valores mij, asociados a cada j. Para esto, se ordenan las tuplas provenientes de la matriz A y B, en 2 listas, segun el valor de j, luego se multiplican. El resultado de cada valor mij, asociado a cada valor j, que a su vez, esta asociado a una clave (i,k), es sumado y se obtiene el resultado requerido para la coordenada (i,k) de la matriz resultante.
+  
+  A continuación, el snippet de código utilizado para la realización de lo anterior.
+
+```{r}
+MultMM_1.mr = function(A, B,r,c){
+  map.A=function(.,X){
+    Y = X[rep(seq_len(nrow(X)), each=c),]
+    Y$k = rep(seq_len(c), nrow(X))
+    Y$m = 'A'
+    keyval( Y[,c('i','k')],Y[,c('j','mij', 'm')] )
+  }
+  map.B=function(.,X){
+    Y = X[rep(seq_len(nrow(X)), each=r),]
+    k = rep(seq_len(r), nrow(X))
+    aux = Y$i
+    Y$i = k
+    aux2 = Y$j
+    Y$k = aux2
+    Y$j = aux
+    Y$m = 'B'
+    keyval(Y[,c('i', 'k')],Y[,c('j','mij', 'm')])
+  }
+  reduce.red = function(k,v){
+    listA = v[v$m == 'A',]
+    listB = v[v$m == 'B',]
+    listA = listA[order(listA['j']), 'mij']
+    listB = listB[order(listB['j']), 'mij']
+    mij = sum(listA * listB)
+    data = data.frame(k$i, k$k, mij)
+    colnames(data) = c('i', 'j', 'mij')
+    keyval(1, data)
+  }
+  A.mr = mapreduce(input=A, map=map.A)
+  B.mr = mapreduce(input=B, map=map.B)
+  list(A.mr, B.mr)
+  result = gather(list(A.mr,B.mr), reduce=reduce.red)
+  values(from.dfs(result))
+}
+
+```
+
+## Demostración
+
+```{r}
+## Comando para establecer el directorio de trabajo
+setwd("/home/lsantella/Desktop/TACD/Asignacion_1")
+
+## Inicializo las variables de entorno de hadoop
+Sys.setenv("HADOOP_PREFIX"="/home/lsantella/hadoop-2.7.2")
+Sys.setenv("HADOOP_CMD"="/home/lsantella/hadoop-2.7.2/bin/hadoop")
+Sys.setenv("HADOOP_STREAMING"="/home/lsantella/hadoop-2.7.2/share/hadoop/tools/lib/hadoop-streaming-2.4.0.jar")
+
+## Cargamos las fuentes y bibliotecas necesarias
+## Libreria de manejo de HDFS
+library(rhdfs)
+hdfs.init()
+
+## Libreria de MapReduce sobre Hadoop
+library(rmr2) 
+ignore <- rmr.options(backend="local") # Opciones "local" o "hadoop"
+library(dplyr)
+## Cargo la funcion de multiplicacion de Matriz x Vector, Tipo 1
+source("prod_Mv_type1.R")
+source('funciones.R')
+#Cargamos los datos de prueba. Ya estan en un formato clave-valor
+mat10 = read.csv('tblAkv10x10.csv')
+mat10ident = read.csv('tblAkv10x10ident.csv')
+vec10 = read.csv('tblxkv10.csv')
+mat3 = read.csv('tblAkv3x3.csv')
+vec3 = read.csv('tblxkv3.csv')
+
+## Dividimos la matriz 10x10 en k bloques
+list = mat.vec.division(mat10,vec10,10,2)
+## Ahora tenemos 2 listas. Una referencia las k submatrices en HDFS y la otra lista
+## los k subvectores.
+mat.parts = list[[1]]
+vec.parts = list[[2]]
+#Procedemos a obtener los vectores que tienen los resultados parciales
+result = MultMV_2.mr(mat.parts, vec.parts)
+result
+
+#### Multiplicacion Matriz-Matriz ####
+A = to.dfs(mat10)
+B = to.dfs(mat10ident)
+## La funcion recibe como parametros, las referencias de ambas matrices en dfs,
+## el numero de filas de la primera matriz y el numero de columnas de la segunda
+result = MultMM_1.mr(A, B,10,10)
+result
+```
+

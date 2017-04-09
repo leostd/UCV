@@ -1,0 +1,145 @@
+---
+title: "Tarea3 - Informe"
+author: "Leonardo Santella | Simon Saman | Eloy Toro"
+date: "Monday, July 27, 2015"
+output: html_document
+---
+
+Se nos provee un conjunto de datos a analizar, asociados con la calidad de servicio en un supermercado con la posibilidad de identificar conglomerados dentro de los clientes encuestados. sobre los grupos identificados se espera tener conocimiento para propiciar la elaboracion de politicas de atencion al cliente y otras estrategias de marketing.
+
+A continuacion se tienen las actividades a realizar, seguidamente, su accion.
+
+1. Haga un análisis exploratorio sobre los datos de entrada y determine si es necesaria la aplicación de
+algún preprocesamiento o limpieza de datos.
+
+```{r}
+#Cargamos las librerias a utilizar
+library(FactoMineR)
+library(rattle)
+
+#Cargamos los datos
+setwd("~/Data Science/Tarea3")
+
+#Lectura de los datos 
+data <- read.csv("Servicio_al_cliente.csv", header=TRUE, row.names=1, dec=",", sep=";")
+
+#Informacion acerca de los datos
+summary(data)
+
+#Dimensiones del data frame obtenido
+dim(data)
+
+#Matriz de correlacion de las variables
+cor(data)
+
+```
+
+Al observar los resultados del analisis previo de los datos, no se obtuvo suficiente evidencia pertinente para eliminar variables poco relevantes para el estudio posterior. Todas las variables se encuentran en un formato numerico, facil de manipular.
+
+2. Aplique el método de componentes principales al conjunto de datos de entrada y, sobre las
+componentes 1 y 2 realice lo siguiente:
+  1) Grafique el mapa el círculo de correlaciones y realize un análisis de las relaciones entre las
+variables involucradas.
+```{r}
+#Analisis de componentes principales
+componentes <- PCA(data, graph=FALSE)
+
+#Grafico del circulo de correlaciones, sobre las 2 componentes principales
+plot(componentes, axes=c(1,2), choix="var", new.plot=TRUE)
+
+```
+
+  2) Grafique el plano principal e identifique la cantidad de posibles grupos.
+
+```{r}
+#Grafico del circulo de correlaciones, sobre las 2 componentes principales
+plot(componentes, axes=c(1,2), choix="ind", new.plot=TRUE)
+```
+
+ En general, es dificil identificar un numero optimo de conglomerados. Este caso, no es la excepcion, los individuos estan bastante amontonados en el invervalo 
+ [-4,4] para el eje de las abscisas y [-4,2] para el eje de las ordenadas. Se puede observar que el individuo "Damaris" esta alejado de los demas individuos. 
+ 
+ Sin tomar en cuenta la dificultad de elegir un numero de conglomerados en este caso, diremos que existen 4 grupos o conglomerados posibles.
+ 
+  3) Por cada grupo determine:
+  a) Cantidad de clientes que los conforman y que porcentaje representa del total.
+  
+  R= Anteriormente se planteo que el numero de grupos era 4. El primer cluster esta conformado por 8 individuos, siendo la proporcion 8/37. El segundo grupo esta conformado por 10, siendo la proporcion 10/37. El grupo 3 esta conformado por 4 individuos, siendo la proporcion 4/37. Por ultimo, el 4to grupo, esta conformado por 16 individuos, con la mayor proporcion 16/37.
+  
+  b) Características más resaltantes del grupo.
+  
+  
+  El grupo 1 esta conformado en su mayoria por personas que poseen una edad por encima de los 30 anhos, otra caracteristica resaltante de este grupo es que no estan muy de acuerdo con la velocidad de las cajas de este supermercado.
+  
+  El grupo 2 esta conformado por personas que en general no tienen un nivel de aprobacion acerca de la calidad de instalaciones, el espacio de parque y la calidad del servicio.
+  
+  El grupo 3 esta conformado por personas que estan sumamente de acuerdo con la velocidad de las cajas en este supermercado.
+  
+  El grupo 4 esta conformado por la mayor porcion de la poblacion, este grupo esta de acuerdo con la mayoria de variables, en pocas palabras, les gusta el servicio brindado por el supermercado en la mayoria de sus aspectos.
+  
+  4) Determine el grado de representación de los individuos y de las variables y razone sobre si es
+necesario estudiar otras combinaciones de componentes (por ejemplo 1 y 3 ó 2 y 3)
+
+
+```{r}
+#Porcentaje de la suma de cosenos cuadrados de los componentes principales 1 y 2 para determinar el grado de representacion de los individuos y las variables sobre estos planos.
+ind <- (componentes$ind$cos2[, 1] + componentes$ind$cos2[, 2]) * 100
+ind
+
+var <- (componentes$var$cos2[, 1] + componentes$var$cos2[, 2]) * 100
+var
+
+#Grafica de los individuos que tengan cos>=0.5
+plot(componentes, axes=c(1,2), choix="ind", new.plot=TRUE, select="cos2 0.1")
+
+#Grafica de las variables que tengan cos>=0.5
+plot(componentes, axes=c(1,2), choix="var", new.plot=TRUE, select="cos2 0.3")
+
+```
+
+Como se puede apreciar, solo fueron dibujados los individuos que tienen un valor de coseno cuadrado mayor o igual a 0.1, siendo este un valor de referencia para identificar individuos que estan muy cerca del origen. Es importante destacar que solo unos pocos estan mal representados.
+
+Al igual que los individuos, las variables que fueron graficadas, son aquellas que tienen un valor de coseno cuadrado mayor que 0.3. Atencion.empleados, Ubicacion y Calidad de servicio son las variables que no estan del todo bien representadas (valor de coseno cuadrado menor a 0.3) 
+
+Si las variables antes indicadas, son bastante determinantes, entonces se procederia a encontrar el plano en el cual esten representadas la mayoria de variables altamente determinantes para el estudio, incluyendo las anteriormente mal representadas. Lo mismo pasa con los individuos.
+
+3. Sobre las dos primeras componentes realice un método de clustering para determinar los grupos
+identificados antes.
+
+```{r}
+modelo = hclust(dist(componentes$ind$coord[,c("Dim.1", "Dim.2")]), method="ward.D")
+plot(modelo)
+rect.hclust(modelo, k = 4, border="blue")
+
+```
+
+Como se puede observar, los grupos antes descritos a grandes rasgos, se aproximan a los resultados de aplicar el metodo de clasificacion jerarquica.
+
+4. Agregue el grupo correspondiente a cada cliente como una nueva columna en los datos de entrada y
+almacene este nuevo data-frame en un archivo llamado Servicio_al_cliente_sal.csv.
+```{r}
+grupos <- cutree(modelo, k = 4)
+data$Grupo <- grupos
+write.csv(x=data, file="Servicio_al_cliente_sal.csv",row.names=TRUE )
+
+```
+
+5. Realice una gráfica de los grupos generados según el método que haya sido empleado para su
+generación.
+
+```{r}
+plot(componentes, axes=c(1,2), choix="ind", new.plot=TRUE, col.ind = data$Grupo + 1)
+points(data, col = data$Grupo + 1, pch = 19)
+```
+
+
+
+Al realizar el estudio anterior, se obtuvieron los datos necesarios para tomar en cuenta las siguientes inferencias.
+
+El grupo de color azul se caracteriza por que sus integrantes tienen una edad considerable y no estan de acuerdo a la velocidad en las cajas registradoras, para esto se podria hacer una campana de marketing afirmando que a los adultos de una edad mayor a 35 (por ejemplo) tendran sus cajas "rapidas". 
+
+El grupo de color rojo, esta compuesto por  individuos que estan de acuerdo con la mayoria de los servicios brindados, algunos no estan del todo de acuerdo con la velocidad en las cajas. Una campana de marketing prudente, seria aquella que refuerce aspectos relevantes en los servicios en cuestion.  
+
+El grupo de color verde, a diferencia del grupo de color rojo, esta compuesto por personas jovenes, que estan sumamente de acuerdo con la velocidad de las cajas, como tambien con otros aspectos acerca del servicio y calidad del supermercado.
+
+El grupo representado por el color azul, esta compuesto por individuos que no estan muy de acuerdo con algunos servicios del supermercado, para solucionar este problema, podria utilizarse una campana de marketing en la que estos usuarios se vean beneficiados de alguna manera, ya sea a traves de una oferta o una ventaja por alguna caracteristica inherente a su grupo.

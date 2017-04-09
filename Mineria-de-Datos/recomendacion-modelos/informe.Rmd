@@ -1,0 +1,208 @@
+---
+title: "Sistemas de Recomendación - Curvas ROC"
+author: "Leonardo Santella"
+date: "Friday, May 06, 2016"
+output: html_document
+---
+
+#Introducción
+
+  En esta ocasión se nos pide implementar un sistema de recomendación basado en un dataset proporcionado por una compañia, además, se nos pide también realizar algunas tareas relacionadas con las transacciones que se encuentran dentro del set de datos. Luego, debemos realizar un estudio de curvas ROC (Receiver Operating Characteristics) para comparar modelos, que serán desarrollados en otros set de datos.
+  
+  La primera parte será dividida en 2, una parte para identificar transacciones bot y otra parte para identificar usuarios y recomendar artículos.
+  
+  La segunda parte, estará netamente dedicada al análisis de Curvas ROC.
+  
+#Inicialización
+
+  Para realizar las tareas pertinentes, cargaremos algunos paquetes, y cargaremos el set de datos proporcionado.
+
+```{r}
+library(arules)
+library(arulesViz)
+library(plyr)
+library(lubridate)
+library(flexclust)
+source("funciones.R")
+periodico = read.csv("periodico.csv", header = T)
+```
+
+
+  Debemos cambiar las transacciones de manera que se pueda observar a que categoria pertenece cada artículo. Para ello ejecutaremos el siguiente bloque de código. 
+  
+```{r, echo=FALSE}
+#Obtenemos los indices de los artículos por transaccion
+items = periodico$articles
+items = strsplit(gsub(pattern = "[{}item]", replacement = "", x = items), ",")
+
+#Indices de forma numerica
+indices = lapply(items, as.numeric)
+
+#Obtenemos cuantos articulos fueron observados en cada transaccion
+nitems = unlist(lapply(items, length))
+
+#Transformamos al formato indicado en el enunciado y en el se de datos ejemplo.csv
+items = lapply(items, convertItems)
+l = unlist(items)
+odds = (((1:(length(l)/2)) * 2) -1)
+articles = l[odds]
+categories = l[-odds]
+periodico$articles = articles
+periodico$categories = categories
+```
+
+#Idenficación y análisis exploratorio de transacciones bot
+
+  Para identificar a las transacciones bot utilizaremos como referencias los "timestamps" de entrada y salida que se encuentran en cada fila del data set.
+  
+  La diferencia entre el tiempo de salida y el tiempo de entrada resulta el tiempo total de la transacción. Asumiremos que cada item consume tiempoTotal / nitems segundos, donde tiempoTotal es el resultado de la diferencia entre el tiempo de salida y el tiempo de llegada; nitems es el número de artículos dentro de la transacción. De manera que si tiempoTotal / nitems < 20, la trasacción será considerada como transacción bot.
+  
+```{r}
+duracion = ymd_hms(periodico$exit) - ymd_hms(periodico$entry)
+duracion = as.numeric(duracion)
+periodico$time = duracion
+periodico$nitems = nitems
+bots = periodico[ periodico$nitems*20 >= duracion, ]
+summary(bots$time)
+```
+
+  En este punto ya podemos conocer las transacciones que corresponden a las 10 visitas más largas y las 10 visitas más cortas.
+  
+  Para definir las visitas, omitiremos las transacciones bots.
+  
+```{r}
+visitas = periodico[-as.numeric(rownames(bots)),]
+cortas = visitas[with(visitas, order(time)),]
+largas = tail(cortas, 10)
+cortas = head(cortas, 10)
+cortas
+largas
+```
+
+#Identificación de Usuarios
+  Para identificar los tipos de usuarios, tomaremos como referencia las clases de los artículos observados en cada transacción.
+  
+  Debemos generar en principio transacciones, para luego transformarlas en una matriz, para ello utilizaremos el paquete arules, sin embargo, debemos generar una estructura diferente a la actual para poder aprovechar las funcionalidades provistas por el paquete. Además, utilizaremos un paquete que nos permitirá la realización de clusters para segmentar a los usuarios y por lo tanto, predecir, dado un usuario nuevo, a que cluster pertenece.
+  
+  La técnica de clusterización utilizada sera el algoritmo de K-Means modificado para que utilice la distancia de jaccard, ya que las transacciones son conjuntos y necesitamos de alguna manera, una medida para comparar conjuntos.
+  
+```{r}
+#Categorias
+categories = visitas$categories
+
+#Separamos el string por comas
+categories = strsplit(categories, ",")
+
+#Almacenamos unicamente las transacciones unicas
+categories = lapply(categories,unique)
+categories = unique(categories)
+categories = lapply(categories, unlist)
+
+#Generamos las transacciones 
+categorriesTrans = as(categories, "transactions")
+
+#Generamos la matriz, ya que esta esturctura es la requerida para clusterizar
+catTransMatrix = as(categorriesTrans, "matrix")
+
+#Clusterizamos
+set.seed(666)
+a = kmeans = kcca(x = catTransMatrix, family = kccaFamily("jaccard"), k = 8)
+
+#Grafico de barras de los centroides
+barplot(a)
+
+#Componentes principales
+pca = prcomp(catTransMatrix)
+
+#Grafico de los clusters proyectados en las 2 primeras componentes principales
+plot(a, data=catTransMatrix, project=pca)
+
+```
+
+Ahora ya obtuvimos un modelo que agrupa las transacciones según su categoria. A través de este modelo, dado una una nueva transacción podriamos asignarle su grupo correspondiente de la siguiente forma.
+
+```{r}
+#Generamos una transaccion nueva
+newTrans = matrix(rep(1,9), byrow = T, ncol=9)
+
+
+#Predecimos a que cluster pertenecerá
+predict(a,newTrans)
+
+#Comprobamos que en efecto es cierto que debe pertenecer al cluster 4
+a@centers
+```
+  
+  En la matriz de los centros, podemos observar que la nueva transaccion tiene mayor parecido con el cluster numero 4. Si calculamos el indice de Jaccard entre todos los centros y la nueva transaccion, llegaremos a la misma conclusión.
+  
+  Para recordar el indice de Jaccard viene dado por $J(A,B) = \frac{|A \cap B|}{|A \cup B|}$. donde $|A|$ representa la cardinalidad del conjunto A.
+  
+#Recomendación de items
+  Para la recomendación de items dado n artículos, vamos a generar las transacciones a través de una matriz de tipo logica para luego, convertirla en la estructura de datos que utiliza el paquete **arules**. Luego de tener las transacciones en el formato adecuado, nos encargaremos de generar las reglas de asociacion con el algoritmo **apriori** implementado en el mismo paquete antes mencionado. Los parametros de confianza y soporte minimos, fueron escogidos de esa forma (minsup = 0.00003 minconf = 0.3) ya que para valores mas bajos se generaban demasiadas reglas, en las que existia independica probabilistica entre el conjunto antecedente y el conjunto consecuente.
+  
+```{r}
+#En este caso generaremos la matriz y luego las transacciones
+indices = indices[-as.numeric(rownames(bots))]
+matriz = matrix(FALSE, nrow=nrow(visitas), ncol=81)
+clases = c("deportes", "politica", "variedades",
+               "internacional","nacionales", "sucesos", 
+               "comunidad", "negocios", "opinion" )
+names = 1:81
+for(i in 1:9)
+  for(j in 1:9)
+    names[(i-1)*9 + j] = paste(clases[i],"/articulo",j,sep="" )
+y = rep(0,81)
+transactions = lapply(indices, generateTransactions, y)
+transactions = matrix(unlist(transactions), byrow=T, ncol=81)
+colnames(transactions) = names
+
+#Trasacciones del paquete arules
+arules_transactions = as(transactions, "transactions")
+summary(arules_transactions)
+
+#Reglas de asociacion generadas
+arules = apriori(transactions, parameter = list(supp=0.00003, conf=0.3, target="rules"))
+
+#Grafico de las reglas generadas
+plot(arules)
+
+#Dado un articulo nuevo 
+newArticle = "deportes/articulo5"
+
+#Buscamos el subconjunto de reglas que lo contengan
+rules.sub <- subset(arules, subset = lhs %ain% newArticle)
+rules.sub = sort(rules.sub, by="confidence", decreasing=T)[1]
+
+#Y recomendamos el consecuente, del antecedente que contenga al articulo nuevo y ademas tenga mayor confianza
+inspect(rules.sub@rhs[1])
+```
+
+#Análisis de curvas ROC
+  Esta es la segunda parte del informe, el cual estará dedicado únicamente al análisis de curvas ROC
+  
+```{r}
+#Cargamos 3 set de datos que contienen informacion
+roc1 = read.csv("roc1.csv", header = T)
+roc2 = read.csv("roc2.csv", header = T)
+roc3= read.csv("roc3.csv", header = T)
+
+```
+
+  En el primer conjunto de datos (roc1.csv) solo se encuentran 2 clases y no existe empate en los scores.
+  
+```{r}
+generate_ROC(roc1$SCORE, roc1$CLASS, "p")
+```
+
+  En el segundo set de datos, existen 2 clases pero esta vez si hay empates en los scores.
+  
+```{r}
+generate_ROC(roc2$SCORE, roc2$CLASS, "p")
+```
+  
+  En el tercer set de datos existen más de dos clases y además hay empates en los scores.
+  
+```{r}
+generate_ROC(roc1$SCORE, roc1$CLASS, "p")
+```
+

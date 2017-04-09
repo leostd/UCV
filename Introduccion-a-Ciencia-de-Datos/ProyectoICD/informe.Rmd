@@ -1,0 +1,393 @@
+---
+title: "Informe"
+author: "Leonardo Santella | Simon Saman | Eloy Toro"
+date: "Monday, August 10, 2015"
+output: html_document
+---
+
+1. Realice las tareas de pre-procesamiento necesarias para mejorar e identicar las palabras
+contenidas en cada post.
+
+En principio cargamos los datos y las librerias necesarias
+
+```{r}
+library(tm)
+library(FactoMineR)
+setwd("~/Data Science/ProyectoICD")
+data <- read.csv("data.csv", sep=";", row.names=1)
+
+```
+
+Para la limpieza de los datos consideramos las siguientes funciones definidas por nosotros
+
+```{r}
+#Esta funcion elimina caracteres seguidos, repetidos, de manera que hara mas eficiente el estudio.
+#Forma una raiz para los diferentes tipos de risas escritas
+#Forma un solo termino para la palabra video (elimina el plural "videos")
+removeCharacters<- function(x){
+  x<-gsub("aa+","a", x)
+  x<-gsub("bb+]","b", x)
+  x<-gsub("(cc)+c+","c", x)
+  x<-gsub("dd+","d", x)
+  x<-gsub("ee+","e", x)
+  x<-gsub("ff+","f", x)
+  x<-gsub("gg+","g", x)
+  x<-gsub("hh+","h", x)
+  x<-gsub("ii+","i", x)
+  x<-gsub("jj+","j", x)
+  x<-gsub("kk+","k", x)
+  x<-gsub("(ll)+l+","l", x)
+  x<-gsub("mm+","m", x)
+  x<-gsub("nn+","n", x)
+  x<-gsub("oo+","o", x)
+  x<-gsub("pp+","p", x)
+  x<-gsub("qq+","q", x)
+  x<-gsub("rr+r+","r", x)
+  x<-gsub("ss+","s", x)
+  x<-gsub("tt+","t", x)
+  x<-gsub("uu+","u", x)
+  x<-gsub("vv+","v", x)
+  x<-gsub("ww+","w", x)
+  x<-gsub("xx+","x", x)
+  x<-gsub("yy+","y", x)
+  x<-gsub("zz+","z", x)
+  x<-gsub("(jaja)+(ja)*", "haha", x)
+  x<-gsub("(jeje)+(je)*", "haha", x)
+  x<-gsub("(juju)+(ju)*", "haha", x)
+  x<-gsub("(jojo)+(jo)*", "haha", x)
+  x<-gsub("(hehe)+(he)*", "haha", x)
+  x<-gsub("(haha)+(ha)*", "haha", x)
+  x<-gsub("[jska]{6}[jska]*","haha",x)
+  x<-gsub("[hsdg]{6}[hdgs]*","haha",x)
+  x<-gsub("(xd)+","haha", x)
+  x<-gsub("(lol)+[lo]*", "haha",x)
+  x<-gsub("videos", "video", x)
+  x
+}
+
+#Elimina iconos con codificacion UTF-8
+removeUTFIcons <- function(x){
+  gsub("<[[:alnum:]+[:alnum:]+]+>","",x)
+}
+
+#Elimina los numeros
+removeNumbers <- function(x){
+  gsub("[[:digit:]]", "", x)
+}
+
+#Elimina los caracteres individuales y los espacios en blanco al inicio del post
+removeSingles <- function(x){
+ x <- gsub("^.$","",x)
+ x <- gsub("^.[[:space:]]$","",x)
+ x <- gsub("^[[:space:]]", "", x)
+ x
+}
+
+#Elimina los URL de los datos
+removeURL <- function(x){
+  x<-gsub("http[[:alnum:]]*", "", x)
+  x<-gsub("www[[:alnum:]]*", "", x)
+  x
+} 
+
+#Inserta una fila en un data frame
+insertRow <- function(existingDF, newrow, r) {
+  existingDF[seq(r+1,nrow(existingDF)+1),] <- existingDF[seq(r,nrow(existingDF)),]
+  existingDF[r,] <- newrow
+  existingDF
+}
+
+```
+
+Ahora procedemos a limpiar el set de datos, sin formar un corpus ya que de esta manera podemos observar de forma mas comoda el comportamiento de las acciones llevadas a cabo
+```{r}
+#Inicio Limpieza de datos
+
+#Eliminamos las filas NA
+data <- na.omit(data)
+
+#Eliminamos la redundacia de espacios en blanco
+data$post<-stripWhitespace(as.character(data$post))
+
+#Elimina las filas que solo contienen un caracter no significativo
+data<- data[!(is.na(data$post) | data$post=="" | data$post==" " | data$post=="\n" | data$post=="\v") | data$post=="\t" | data$post=="\r" | data$post=="\f",]
+
+#Colocamos todas las letras en minuscula
+data$post <- tolower(data$post)
+
+#Removemos palabras no significativas para nuestro estudio
+myStopwords <- c(stopwords(kind="es"), stopwords(kind='en'), 'mierda', 'verga', 'puta', 'fuck')
+data$post <- removeWords(data$post, myStopwords)
+
+#Eliminamos iconos codificados en UTF-8 (Algunos)
+data$post <- removeUTFIcons(data$post)
+
+#Eliminamos signos de puntuacion
+data$post <- removePunctuation(data$post)
+
+#Eliminaos los URL 
+data$post <- removeURL(data$post)
+
+#Eliminamos por 2da vez la redundacia de espacios en blanco
+data$post<-stripWhitespace(as.character(data$post))
+
+#Eliminamos por 2da vez las filas que contienen catracteres no significativos
+data<- data[!(is.na(data$post) | data$post=="" | data$post==" " | data$post=="\n" | data$post=="\v") | data$post=="\t" | data$post=="\r" | data$post=="\f",]
+
+#Eliminamos varios elementos antes mencionados en la definicion de esta funcion
+data$post <- removeCharacters(data$post)
+
+#Eliminamos los numeros
+data$post <- removeNumbers(data$post)
+
+#Eliminamos caracteres individuales y espacios en blanco al inicio del post
+data$post <- removeSingles(data$post)
+
+#Eliminamos por ultima vez la redundancia de espacios en blanco
+data$post<-stripWhitespace(as.character(data$post))
+
+#Eliminamos las filas con caracteres no signuficativos
+data<- data[!(is.na(data$post) | data$post=="" | data$post==" " | data$post=="\n" | data$post=="\v") | data$post=="\t" | data$post=="\r" | data$post=="\f",]
+```
+
+
+2. para cada individuo identifique las palabras que los relacionan con los otros.
+
+Para determinar las palabras que relacionan a los usuarios entre ellos, debemos primero formar ciertas estructuras
+```{r}
+#Armamos 5 data frames, uno por usuario
+postPersona1 <- data[data$id_user==1,]
+postPersona2 <- data[data$id_user==2,]
+postPersona3 <- data[data$id_user==3,]
+postPersona4 <- data[data$id_user==4,]
+postPersona5 <- data[data$id_user==5,]
+
+#Armamos los corpus para luego armar las term-document matrix
+corpus1 <- Corpus(VectorSource(postPersona1))
+corpus2 <- Corpus(VectorSource(postPersona2))
+corpus3 <- Corpus(VectorSource(postPersona3))
+corpus4 <- Corpus(VectorSource(postPersona4))
+corpus5 <- Corpus(VectorSource(postPersona5))
+
+#Armamos las matrices respectivas
+tdm1 <- TermDocumentMatrix(corpus1,control=list(wordLengths=c(2,Inf)))
+tdm2 <- TermDocumentMatrix(corpus2,control=list(wordLengths=c(2,Inf)))
+tdm3 <- TermDocumentMatrix(corpus3,control=list(wordLengths=c(2,Inf)))
+tdm4 <- TermDocumentMatrix(corpus4,control=list(wordLengths=c(2,Inf)))
+tdm5 <- TermDocumentMatrix(corpus5,control=list(wordLengths=c(2,Inf)))
+
+#Extraemos los terminos de cada matriz
+terminos1<- as.data.frame(unlist(findFreqTerms(tdm1, lowfreq=1)))
+terminos2<- as.data.frame(unlist(findFreqTerms(tdm2, lowfreq=1)))
+terminos3 <- as.data.frame(unlist(findFreqTerms(tdm3, lowfreq=1)))
+terminos4 <- as.data.frame(unlist(findFreqTerms(tdm4, lowfreq=1)))
+terminos5 <- as.data.frame(unlist(findFreqTerms(tdm5, lowfreq=1)))
+
+#Calculamos la frecuencia de cada termino por usuario
+termFrequency1 <- rowSums(as.matrix(tdm1))
+termFrequency2 <- rowSums(as.matrix(tdm2))
+termFrequency3 <- rowSums(as.matrix(tdm3))
+termFrequency4 <- rowSums(as.matrix(tdm4))
+termFrequency5 <- rowSums(as.matrix(tdm5))
+
+#Inicializamos un data frame por usuario
+Usuario1 <- data.frame( Termino=character(3700), frecuencia=numeric(3700))
+Usuario2 <- data.frame( Termino=character(1545), frecuencia=numeric(1545)) 
+Usuario3 <- data.frame( Termino=character(2800), frecuencia=numeric(2800)) 
+Usuario4 <- data.frame( Termino=character(3222), frecuencia=numeric(3222)) 
+Usuario5 <- data.frame( Termino=character(3282), frecuencia=numeric(3282)) 
+
+#LLenamos los data frame 
+Usuario1$Termino <- terminos1[,1]
+Usuario1$frecuencia <- termFrequency1
+Usuario2$Termino <- terminos2[,1]
+Usuario2$frecuencia <- termFrequency2
+Usuario3$Termino <- terminos3[,1]
+Usuario3$frecuencia <- termFrequency3
+Usuario4$Termino <- terminos4[,1]
+Usuario4$frecuencia <- termFrequency4
+Usuario5$Termino <- terminos5[,1]
+Usuario5$frecuencia <- termFrequency5
+
+names(Usuario1)[2] <- paste("Usuario1")
+names(Usuario2)[2] <- paste("Usuario2")
+names(Usuario3)[2] <- paste("Usuario3")
+names(Usuario4)[2] <- paste("Usuario4")
+names(Usuario5)[2] <- paste("Usuario5")
+rownames(Usuario1) <- Usuario1$Termino
+rownames(Usuario2) <- Usuario2$Termino
+rownames(Usuario3) <- Usuario3$Termino
+rownames(Usuario4) <- Usuario4$Termino
+rownames(Usuario5) <- Usuario5$Termino
+Usuario1$Termino <- NULL
+Usuario2$Termino <- NULL
+Usuario3$Termino <- NULL
+Usuario4$Termino <- NULL
+Usuario5$Termino <- NULL
+
+
+#Buscamos las relaciones entre los usuarios y obtemos subconjuntos de los data frames
+#Relacion del Usuario 1 con los demas
+Relacion12 <- merge(Usuario1, Usuario2, by = "row.names")
+Relacion13 <- merge(Usuario1, Usuario3, by = "row.names")
+Relacion14 <- merge(Usuario1, Usuario4, by = "row.names")
+Relacion15 <- merge(Usuario1, Usuario5, by = "row.names")
+
+#Relacion del usuario2 con los demas
+Relacion21 <- merge(Usuario2, Usuario1, by = "row.names")
+Relacion23 <- merge(Usuario2, Usuario3, by = "row.names")
+Relacion24 <- merge(Usuario2, Usuario4, by = "row.names")
+Relacion25 <- merge(Usuario2, Usuario5, by = "row.names")
+
+#Relacion del usuario 3 con los demas
+Relacion31 <- merge(Usuario3, Usuario1, by = "row.names")
+Relacion32 <- merge(Usuario3, Usuario2, by = "row.names")
+Relacion34 <- merge(Usuario3, Usuario4, by = "row.names")
+Relacion35 <- merge(Usuario3, Usuario5, by = "row.names")
+
+#Relacion del usuario 4 con el 5
+Relacion45 <- merge(Usuario4, Usuario5, by = "row.names")
+
+#Relacion del usuario 1 contra todos los demas
+Relacion1vsT <- merge(Relacion12, Relacion13, all = TRUE)
+Relacion1vsT <- merge(Relacion1vsT, Relacion14, all = TRUE)
+Relacion1vsT <- merge(Relacion1vsT, Relacion15, all = TRUE)
+
+#Relacion del usuario 2 contra todos los demas
+Relacion2vsT <- merge(Relacion21, Relacion23, all = TRUE)
+Relacion2vsT <- merge(Relacion2vsT, Relacion24, all = TRUE)
+Relacion2vsT <- merge(Relacion2vsT, Relacion25, all = TRUE)
+
+#Relacion del usuario 3 contra todos los demas
+Relacion3vsT <- merge(Relacion31, Relacion32, all = TRUE)
+Relacion3vsT <- merge(Relacion3vsT, Relacion34, all = TRUE)
+Relacion3vsT <- merge(Relacion3vsT, Relacion35, all = TRUE)
+
+#Relacion del usuario 4 contra todos los demas
+Relacion4vsT <- merge(Relacion14,Relacion24, all = TRUE)
+Relacion4vsT <- merge(Relacion4vsT, Relacion34, all = TRUE)
+Relacion4vsT <- merge(Relacion4vsT, Relacion45, all = TRUE)
+
+#Relacion del usuario 5 contra todos los demas
+Relacion5vsT <- merge(Relacion15, Relacion25, all = TRUE)
+Relacion5vsT <- merge(Relacion5vsT, Relacion35, all = TRUE)
+Relacion5vsT <- merge(Relacion5vsT, Relacion45, all = TRUE)
+
+#Relacion del de todos contra todos
+#En este Data Frame podemos observar las palabras en las que se relacionan unos con otros
+Relacion <- merge(Relacion1vsT, Relacion2vsT, all = TRUE)
+Relacion <- merge(Relacion, Relacion3vsT, all = TRUE)
+Relacion <- merge(Relacion, Relacion4vsT, all = TRUE)
+Relacion <- merge(Relacion, Relacion5vsT, all = TRUE)
+Relacion[is.na(Relacion)] <- 0
+
+
+```
+
+3. Aplique algun metodo de clasificacion para agrupar a los usuarios segun las palabras
+que elija.(justifque en el informe).
+
+En este punto escogeremos ciertas palabras para clasificar los Usuarios segun lo que escriben en sus publicaciones
+```{r}
+corpus <- Corpus(VectorSource(data$post))
+tdm <- TermDocumentMatrix(corpus,control=list(wordLengths=c(2,Inf)))
+Terminos<- (unlist(findFreqTerms(tdm, lowfreq=1)))
+
+allTerms = data.frame( Termino = character(10382), Frecuencia = numeric(10382))
+allTerms$Termino <- (unlist(findFreqTerms(tdm, lowfreq=1)))
+frecuenciaTotal <- rowSums(as.matrix(tdm))
+allTerms$Frecuencia <- frecuenciaTotal
+
+terminosFrecuentes <- allTerms[ allTerms$Frecuencia > 50, ]
+rownames(terminosFrecuentes) <- terminosFrecuentes$Termino
+terminosFrecuentes$Termino <- NULL
+dim(terminosFrecuentes)
+distMatrix <- dist(terminosFrecuentes)
+fit <- hclust(distMatrix, method="ward.D")
+plot(fit)
+rect.hclust(fit, k=3)
+
+#Formaremos 3 subgrupos de palabras frecuentes
+grupos <- cutree(fit, k = 3)
+terminosFrecuentes$Grupo <- grupos
+
+aportes <- merge(terminosFrecuentes, Usuario1, all.x = TRUE, by = "row.names")
+aportes <- merge(aportes, Usuario2, all.x = TRUE, by.x = "Row.names", by.y = "row.names")
+aportes <- merge(aportes, Usuario3, all.x = TRUE, by.x = "Row.names", by.y = "row.names")
+aportes <- merge(aportes, Usuario4, all.x = TRUE, by.x = "Row.names", by.y = "row.names")
+aportes <- merge(aportes, Usuario5, all.x = TRUE, by.x = "Row.names", by.y = "row.names")
+aportes[is.na(aportes)]<- 0
+
+freqTerms <- findFreqTerms(tdm, lowfreq=50)
+matrixClust <- aportes[c("Row.names","Usuario1", "Usuario2", "Usuario3", "Usuario4", "Usuario5")]
+matrixClust <- t(matrixClust)
+matrixClust <- matrixClust[2:6,]
+
+distMatrix2 <- dist(matrixClust)
+fit2 <- hclust(distMatrix2, method = "ward.D")
+plot(fit2)
+rect.hclust(fit2, k=3)
+```
+
+En el primer grafico podemos observar las palabras mas frecuentes, procederemos ahora a asignar clusters.
+
+En el segundo podemos observar los clusters formados que por los usuarios segun su frecuencia aportada a las palabras mas frecuentes
+
+Formamos 3 grupos caracterizamos las palabras por su frecuencia, el grupo 1 esta conformado por palabras que tienen una frecuencia mayor que 50 pero menor que 100, el grupo 2 mayor que 100 y menor que 222, el grupo 3 por elementos con frecuencia mayor que 222 y menor que 414. 
+
+Ahora clasificaremos a los usuarios por su aporte a la frecuencia de dichos terminos y observaremos las relaciones a traves de un analisis de componentes principales. La relacion esta dada por la frecuencia aportada por los usuarios a la frecuencia total de las palabras mas comunes en el total de publicaciones de la red social Facebook luego de limpiar la data.
+
+```{r}
+#Observaremos relaciones entre los usuarios
+aportes
+
+#Matriz de correlaciones
+cor(aportes[,4:8])
+
+#Analisis de componentes principales
+componentes <- PCA(aportes[, 4:8])
+
+```
+
+En el Data Frame anterior podemos observar la frecuencia de los terminos mas comunes (frecuencia > 50) y el aporte de a dicha frecuencia por parte de cada usuario.
+
+En el circulo de correlaciones se puede evidenciar lo antes observado en la clasificacion jerarquica, los usuarios 1 y 2 son medianamente inversamente proporcionales y ademas, no guardan casi relacion con los demas Usuarios. Es importante destacar, que segun el circulo de correlaciones, los individuos estan bastante bien representados en el plano formado por las 2 primeras componentes principales.
+
+```{r}
+Grupo1 <- aportes[aportes$Grupo==1,]
+Grupo2 <- aportes[aportes$Grupo==2,]
+Grupo3 <- aportes[aportes$Grupo==3,]
+
+Grupo1
+Grupo2
+Grupo3
+
+summary(Grupo1)
+summary(Grupo2)
+summary(Grupo3)
+```
+
+En los datos anteriores se puede observar los usuarios que mas aportan a una palabra en un determinado grupo, por ejemplo el Usuario2 aporta 90 de la frecuencia total de una palabra, el Usuario 5 en el grupo 3 aporta 104 y el Usuario3 en el grupo 1 aporta 76 a una palabra. Dichas palabras de pueden observar en los Data Frame antes mostrados con los elementos de los grupos
+
+---
+4. Genere un nuevo data frame en el que almacene una matriz individuos* individuos y
+cada entrada son las palabras que los relacionan, luego guardelo en un nuevo archivo
+con el nombre CI1 CI2 facebook usuarios grupos.csv
+```{r}
+write.csv(Relacion, "21014872_22022441_23194702_facebook_usuarios_grupos.csv")
+```
+5. Define las relaciones que considere mas importantes.
+
+En este punto es importante destacar que que existen usuarios que aportan casi toda la frecuencia total a ciertas palabras, en funcion a esto, podemos llegar a la conclusion que estos usuarios se diferencian de los demas, debido a que en sus Facebooks, hablan mucho mas de topicos relacionados con dicha palabra que los otros usuarios.
+
+```{r}
+aportes
+```
+
+Se puede observar como por ejemplo el usuario 3 abarca gran parte de la frecuencia de las palabras "dios", "papa", "francisco". Por lo cual podemos inferir que el Usuario3 esta relacionado con la relacion Cristiana, siendo su maximo representante en la tierra (que tambien es un termino en el cual aporta gran parte de la frecuencia total) el papa Francisco.
+
+Se puede observar ademas, que los usuario 1,2 y 5 son los que mas aportan al grupo 3 del cluster de palabras, formado por las palabras "haha" de frecuencia 414 y la palabra video de frecuencia 326.
+
+Una relacion importante, es que todos los usuarios estan fuertementes relacionados por las palabras haha y video. En base a esto, se puede concluir que los amigos de los diferentes usuarios, tienden a "escribir" su risa y publicar videos (o hablar de ellos) de manera regular en la red social facebook.
+
+En base a los resultados de la clusterizacion tanto de palabras como de individuos, queda evidencia que los Usuarios 1 y 2 pertenecen a grupos diferentes donde hablan de temas muy diferentes entre si, y que casi no guardan relacion con los demas usuarios.Ademas, los Usuarios 1,4 y 5, en funcion a la informacion obtenida a traves de la frecuencia de las palabras comunes, se evidencia que hablan de temas muy parecidos entre si.
